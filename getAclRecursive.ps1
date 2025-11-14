@@ -1,10 +1,10 @@
 $Path = "L:\lokal"
-$Output = "C:\ACL-Export.html"
+$Output = "C:\ACL-Export.csv"
 
 Write-Host "Henter mapper..."
 $Folders = Get-ChildItem -LiteralPath $Path -Directory -Recurse -ErrorAction SilentlyContinue
 
-$Rows = @()
+$Results = @()
 
 foreach ($Folder in $Folders) {
     Write-Host "ACL → $($Folder.FullName)"
@@ -29,7 +29,7 @@ foreach ($Folder in $Folders) {
             }
 
             if ($members.Count -eq 0) {
-                $Rows += [pscustomobject]@{
+                $Results += [pscustomobject]@{
                     Folder       = $Folder.FullName
                     Identity     = $identity
                     ExpandedUser = "<empty group>"
@@ -40,12 +40,12 @@ foreach ($Folder in $Folders) {
 
             foreach ($m in $members) {
                 $disp = try { 
-                    $m | Get-ADUser -ErrorAction Stop | Select-Object -ExpandProperty DisplayName 
-                } catch { 
-                    $m.Name 
+                    (Get-ADUser $m.SamAccountName -ErrorAction Stop).DisplayName 
+                } catch {
+                    $m.Name
                 }
 
-                $Rows += [pscustomobject]@{
+                $Results += [pscustomobject]@{
                     Folder       = $Folder.FullName
                     Identity     = $identity
                     ExpandedUser = $disp
@@ -57,10 +57,10 @@ foreach ($Folder in $Folders) {
         else {
             $disp = $identity
             try {
-                $disp = Get-ADUser $identity -ErrorAction Stop | Select-Object -ExpandProperty DisplayName
+                $disp = (Get-ADUser $identity -ErrorAction Stop).DisplayName
             } catch {}
 
-            $Rows += [pscustomobject]@{
+            $Results += [pscustomobject]@{
                 Folder       = $Folder.FullName
                 Identity     = $identity
                 ExpandedUser = $disp
@@ -71,15 +71,7 @@ foreach ($Folder in $Folders) {
     }
 }
 
-# HTML formatering (Excel åbner det som et pænt ark)
-$Html = $Rows | ConvertTo-Html -Head "
-<style>
-table { border-collapse: collapse; font-family: Segoe UI, sans-serif; font-size: 12px; }
-th { background: #eaeaea; border: 1px solid #ccc; padding: 4px; }
-td { border: 1px solid #ccc; padding: 3px; }
-</style>
-" -Title "Folder ACL Export"
-
-$Html | Out-File $Output -Encoding UTF8
+Write-Host "Eksporterer CSV..."
+$Results | Export-Csv -Path $Output -NoTypeInformation -Encoding UTF8
 
 Write-Host "Færdig → $Output"
