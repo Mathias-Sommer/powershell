@@ -1,13 +1,10 @@
-# Kræver ImportExcel modul
-# Install-Module ImportExcel -Scope CurrentUser
-
-$Path = "E:\Lokal\Billeder"
-$Output = "C:\ACL-Export.xlsx"
+$Path = "L:\lokal"
+$Output = "C:\ACL-Export.html"
 
 Write-Host "Henter mapper..."
 $Folders = Get-ChildItem -LiteralPath $Path -Directory -Recurse -ErrorAction SilentlyContinue
 
-$Results = @()
+$Rows = @()
 
 foreach ($Folder in $Folders) {
     Write-Host "ACL → $($Folder.FullName)"
@@ -25,7 +22,6 @@ foreach ($Folder in $Folders) {
         } catch {}
 
         if ($isGroup) {
-            # Udvid gruppemedlemmer
             try {
                 $members = Get-ADGroupMember -Identity $identity -Recursive -ErrorAction Stop
             } catch {
@@ -33,7 +29,7 @@ foreach ($Folder in $Folders) {
             }
 
             if ($members.Count -eq 0) {
-                $Results += [pscustomobject]@{
+                $Rows += [pscustomobject]@{
                     Folder       = $Folder.FullName
                     Identity     = $identity
                     ExpandedUser = "<empty group>"
@@ -43,9 +39,13 @@ foreach ($Folder in $Folders) {
             }
 
             foreach ($m in $members) {
-                $disp = try { $m | Get-ADUser -ErrorAction Stop | Select-Object -ExpandProperty DisplayName } catch { $m.Name }
+                $disp = try { 
+                    $m | Get-ADUser -ErrorAction Stop | Select-Object -ExpandProperty DisplayName 
+                } catch { 
+                    $m.Name 
+                }
 
-                $Results += [pscustomobject]@{
+                $Rows += [pscustomobject]@{
                     Folder       = $Folder.FullName
                     Identity     = $identity
                     ExpandedUser = $disp
@@ -55,13 +55,12 @@ foreach ($Folder in $Folders) {
             }
         }
         else {
-            # Identity er bruger direkte
             $disp = $identity
             try {
                 $disp = Get-ADUser $identity -ErrorAction Stop | Select-Object -ExpandProperty DisplayName
             } catch {}
 
-            $Results += [pscustomobject]@{
+            $Rows += [pscustomobject]@{
                 Folder       = $Folder.FullName
                 Identity     = $identity
                 ExpandedUser = $disp
@@ -72,7 +71,15 @@ foreach ($Folder in $Folders) {
     }
 }
 
-Write-Host "Eksporterer til Excel..."
-$Results | Export-Excel -Path $Output -AutoSize -BoldTopRow -FreezeTopRow -WorksheetName "ACL"
+# HTML formatering (Excel åbner det som et pænt ark)
+$Html = $Rows | ConvertTo-Html -Head "
+<style>
+table { border-collapse: collapse; font-family: Segoe UI, sans-serif; font-size: 12px; }
+th { background: #eaeaea; border: 1px solid #ccc; padding: 4px; }
+td { border: 1px solid #ccc; padding: 3px; }
+</style>
+" -Title "Folder ACL Export"
+
+$Html | Out-File $Output -Encoding UTF8
 
 Write-Host "Færdig → $Output"
