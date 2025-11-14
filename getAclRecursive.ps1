@@ -1,0 +1,78 @@
+# Kræver ImportExcel modul
+# Install-Module ImportExcel -Scope CurrentUser
+
+$Path = "E:\Lokal\Billeder"
+$Output = "C:\ACL-Export.xlsx"
+
+Write-Host "Henter mapper..."
+$Folders = Get-ChildItem -LiteralPath $Path -Directory -Recurse -ErrorAction SilentlyContinue
+
+$Results = @()
+
+foreach ($Folder in $Folders) {
+    Write-Host "ACL → $($Folder.FullName)"
+
+    $acl = Get-Acl -LiteralPath $Folder.FullName
+
+    foreach ($ace in $acl.Access) {
+        $identity = $ace.IdentityReference.Value
+
+        # Tjek om identity er AD-gruppe
+        $isGroup = $false
+        try {
+            $obj = Get-ADObject -Filter "sAMAccountName -eq '$identity'" -ErrorAction Stop
+            if ($obj.ObjectClass -eq "group") { $isGroup = $true }
+        } catch {}
+
+        if ($isGroup) {
+            # Udvid gruppemedlemmer
+            try {
+                $members = Get-ADGroupMember -Identity $identity -Recursive -ErrorAction Stop
+            } catch {
+                $members = @()
+            }
+
+            if ($members.Count -eq 0) {
+                $Results += [pscustomobject]@{
+                    Folder       = $Folder.FullName
+                    Identity     = $identity
+                    ExpandedUser = "<empty group>"
+                    Access       = $ace.FileSystemRights.ToString()
+                    Type         = "Group"
+                }
+            }
+
+            foreach ($m in $members) {
+                $disp = try { $m | Get-ADUser -ErrorAction Stop | Select-Object -ExpandProperty DisplayName } catch { $m.Name }
+
+                $Results += [pscustomobject]@{
+                    Folder       = $Folder.FullName
+                    Identity     = $identity
+                    ExpandedUser = $disp
+                    Access       = $ace.FileSystemRights.ToString()
+                    Type         = "Group → User"
+                }
+            }
+        }
+        else {
+            # Identity er bruger direkte
+            $disp = $identity
+            try {
+                $disp = Get-ADUser $identity -ErrorAction Stop | Select-Object -ExpandProperty DisplayName
+            } catch {}
+
+            $Results += [pscustomobject]@{
+                Folder       = $Folder.FullName
+                Identity     = $identity
+                ExpandedUser = $disp
+                Access       = $ace.FileSystemRights.ToString()
+                Type         = "User"
+            }
+        }
+    }
+}
+
+Write-Host "Eksporterer til Excel..."
+$Results | Export-Excel -Path $Output -AutoSize -BoldTopRow -FreezeTopRow -WorksheetName "ACL"
+
+Write-Host "Færdig → $Output"
