@@ -6,3 +6,4 @@ This will take all items ending with `space (1)` and replace with nothing.
 ```powershell
 Get-ChildItem | Rename-item -Newname { $_.Name -replace ' \(1\)(?=\.jpg$)', ''}
 ```
+![Screenshot of command being ran](images/rename-with-regex.png)
